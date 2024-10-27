@@ -8,6 +8,7 @@ from core.tools.tool.builtin_tool import BuiltinTool
 SDURL = {
     "sd_3": "https://api.siliconflow.cn/v1/stabilityai/stable-diffusion-3-medium/text-to-image",
     "sd_xl": "https://api.siliconflow.cn/v1/stabilityai/stable-diffusion-xl-base-1.0/text-to-image",
+    "sd_3.5_large": "https://api.siliconflow.cn/v1/stabilityai/stable-diffusion-3-5-large/text-to-image",
 }
 
 
