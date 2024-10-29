@@ -1,34 +1,31 @@
 from typing import Any, Union
 
-import requests
-
 from core.tools.entities.tool_entities import ToolInvokeMessage
+from core.tools.provider.builtin.siliconflow.tools.common import ToolHelper
 from core.tools.tool.builtin_tool import BuiltinTool
-
-SILICONFLOW_API_URL = "https://api.siliconflow.cn/v1/image/generations"
-
-SD_MODELS = {
-    "sd_3": "stabilityai/stable-diffusion-3-medium",
-    "sd_xl": "stabilityai/stable-diffusion-xl-base-1.0",
-    "sd_3.5_large": "stabilityai/stable-diffusion-3-5-large",
-}
 
 
 class StableDiffusionTool(BuiltinTool):
+    @classmethod
+    def get_model_map(cls) -> dict[str, str]:
+        return {
+            "sd_3": "stabilityai/stable-diffusion-3-medium",
+            "sd_xl": "stabilityai/stable-diffusion-xl-base-1.0",
+            "sd_3.5_large": "stabilityai/stable-diffusion-3-5-large",
+        }
+
     def _invoke(
         self, user_id: str, tool_parameters: dict[str, Any]
     ) -> Union[ToolInvokeMessage, list[ToolInvokeMessage]]:
-        headers = {
-            "accept": "application/json",
-            "content-type": "application/json",
-            "authorization": f"Bearer {self.runtime.credentials['siliconFlow_api_key']}",
-        }
+        headers = ToolHelper.get_headers(self.runtime.credentials["siliconFlow_api_key"])
+        model = self.get_model_map().get(tool_parameters.get("model"), list(self.get_model_map().values())[0])
+        payload = self.build_payload(tool_parameters, model)
+        return ToolHelper.send_request(ToolHelper.API_URL, payload, headers)
 
-        model = tool_parameters.get("model", "sd_3")
-        sd_model = SD_MODELS.get(model)
-
-        payload = {
-            "model": sd_model,
+    @classmethod
+    def build_payload(cls, tool_parameters: dict[str, Any], model: str) -> dict[str, Any]:
+        return {
+            "model": model,
             "prompt": tool_parameters.get("prompt"),
             "negative_prompt": tool_parameters.get("negative_prompt", ""),
             "image_size": tool_parameters.get("image_size", "1024x1024"),
@@ -37,13 +34,3 @@ class StableDiffusionTool(BuiltinTool):
             "guidance_scale": tool_parameters.get("guidance_scale", 7.5),
             "num_inference_steps": tool_parameters.get("num_inference_steps", 20),
         }
-
-        response = requests.post(SILICONFLOW_API_URL, json=payload, headers=headers)
-        if response.status_code != 200:
-            return self.create_text_message(f"Got Error Response:{response.text}")
-
-        res = response.json()
-        result = [self.create_json_message(res)]
-        for image in res.get("images", []):
-            result.append(self.create_image_message(image=image.get("url"), save_as=self.VariableKey.IMAGE.value))
-        return result

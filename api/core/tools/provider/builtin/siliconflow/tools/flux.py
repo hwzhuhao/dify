@@ -1,43 +1,32 @@
 from typing import Any, Union
 
-import requests
-
 from core.tools.entities.tool_entities import ToolInvokeMessage
+from core.tools.provider.builtin.siliconflow.tools.common import ToolHelper
 from core.tools.tool.builtin_tool import BuiltinTool
-
-FLUX_URL = {
-    "schnell": "https://api.siliconflow.cn/v1/black-forest-labs/FLUX.1-schnell/text-to-image",
-    "dev": "https://api.siliconflow.cn/v1/image/generations",
-}
 
 
 class FluxTool(BuiltinTool):
+    @classmethod
+    def get_model_map(cls) -> dict[str, str]:
+        return {
+            "schnell": "black-forest-labs/FLUX.1-schnell",
+            "dev": "black-forest-labs/FLUX.1-dev",
+        }
+
     def _invoke(
         self, user_id: str, tool_parameters: dict[str, Any]
     ) -> Union[ToolInvokeMessage, list[ToolInvokeMessage]]:
-        headers = {
-            "accept": "application/json",
-            "content-type": "application/json",
-            "authorization": f"Bearer {self.runtime.credentials['siliconFlow_api_key']}",
-        }
+        headers = ToolHelper.get_headers(self.runtime.credentials["siliconFlow_api_key"])
+        model = self.get_model_map().get(tool_parameters.get("model"), list(self.get_model_map().values())[0])
+        payload = self.build_payload(tool_parameters, model)
+        return ToolHelper.send_request(ToolHelper.API_URL, payload, headers)
 
-        payload = {
+    @classmethod
+    def build_payload(cls, tool_parameters: dict[str, Any], model: str) -> dict[str, Any]:
+        return {
+            "model": model,
             "prompt": tool_parameters.get("prompt"),
             "image_size": tool_parameters.get("image_size", "1024x1024"),
             "seed": tool_parameters.get("seed"),
             "num_inference_steps": tool_parameters.get("num_inference_steps", 20),
         }
-        model = tool_parameters.get("model", "schnell")
-        url = FLUX_URL.get(model)
-        if model == "dev":
-            payload["model"] = "black-forest-labs/FLUX.1-dev"
-
-        response = requests.post(url, json=payload, headers=headers)
-        if response.status_code != 200:
-            return self.create_text_message(f"Got Error Response:{response.text}")
-
-        res = response.json()
-        result = [self.create_json_message(res)]
-        for image in res.get("images", []):
-            result.append(self.create_image_message(image=image.get("url"), save_as=self.VariableKey.IMAGE.value))
-        return result
